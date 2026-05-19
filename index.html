@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PNG Color Manipulation Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+    <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-4xl space-y-6">
+      <h1 class="text-2xl font-bold text-center">
+        PNG Color Manipulation Tool
+      </h1>
+
+      <!-- Upload -->
+      <div class="text-center">
+        <input
+          type="file"
+          id="upload"
+          accept="image/png"
+          class="block mx-auto mb-2"
+        />
+        <p class="text-sm text-gray-500">Click image to pick color</p>
+      </div>
+
+      <!-- Canvas -->
+      <div class="flex justify-center">
+        <canvas id="canvas" class="border rounded max-w-full"></canvas>
+      </div>
+
+      <!-- Controls -->
+      <div class="space-y-4">
+        <!-- Selected Color -->
+        <div class="flex items-center gap-4">
+          <div id="colorPreview" class="w-8 h-8 border rounded"></div>
+          <span id="colorHex" class="font-mono text-sm">No color selected</span>
+        </div>
+
+        <!-- Tolerance -->
+        <div>
+          <label class="block font-medium"
+            >Tolerance: <span id="toleranceValue">0</span></label
+          >
+          <input
+            type="range"
+            id="tolerance"
+            min="0"
+            max="100"
+            value="0"
+            class="w-full"
+          />
+        </div>
+
+        <!-- Tools -->
+        <div class="flex gap-4">
+          <button
+            id="removeBtn"
+            class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+          >
+            Remove Color
+          </button>
+          <button
+            id="swapBtn"
+            class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+          >
+            Swap Color
+          </button>
+          <input
+            type="color"
+            id="replacementColor"
+            class="hidden border rounded"
+          />
+        </div>
+
+        <!-- Download -->
+        <div class="text-center">
+          <button
+            id="downloadBtn"
+            class="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Download PNG
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const uploadInput = document.getElementById("upload");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const toleranceSlider = document.getElementById("tolerance");
+      const toleranceValue = document.getElementById("toleranceValue");
+      const removeBtn = document.getElementById("removeBtn");
+      const swapBtn = document.getElementById("swapBtn");
+      const replacementColorInput = document.getElementById("replacementColor");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const colorPreview = document.getElementById("colorPreview");
+      const colorHex = document.getElementById("colorHex");
+
+      let originalImageData = null;
+      let selectedColor = null;
+      let activeTool = null;
+
+      function loadImage(file) {
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          originalImageData = ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+          );
+        };
+        img.src = URL.createObjectURL(file);
+      }
+
+      function pickColor(event) {
+        if (!originalImageData) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor(
+          (event.clientX - rect.left) * (canvas.width / rect.width),
+        );
+        const y = Math.floor(
+          (event.clientY - rect.top) * (canvas.height / rect.height),
+        );
+        const data = ctx.getImageData(x, y, 1, 1).data;
+        selectedColor = { r: data[0], g: data[1], b: data[2] };
+        const hex = rgbToHex(data[0], data[1], data[2]);
+        colorPreview.style.backgroundColor = hex;
+        colorHex.textContent = hex;
+        processImage();
+      }
+
+      function rgbToHex(r, g, b) {
+        return (
+          "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")
+        );
+      }
+
+      function hexToRgb(hex) {
+        const bigint = parseInt(hex.slice(1), 16);
+        return {
+          r: (bigint >> 16) & 255,
+          g: (bigint >> 8) & 255,
+          b: bigint & 255,
+        };
+      }
+
+      function getThreshold() {
+        const percent = parseInt(toleranceSlider.value);
+        return (percent / 100) * 441;
+      }
+
+      function processImage() {
+        if (!originalImageData || !selectedColor || !activeTool) {
+          if (originalImageData) ctx.putImageData(originalImageData, 0, 0);
+          return;
+        }
+
+        const imageData = new ImageData(
+          new Uint8ClampedArray(originalImageData.data),
+          originalImageData.width,
+          originalImageData.height,
+        );
+
+        const data = imageData.data;
+        const threshold = getThreshold();
+
+        let replacement = null;
+        if (activeTool === "swap") {
+          replacement = hexToRgb(replacementColorInput.value);
+        }
+
+        for (let i = 0; i < data.length; i += 4) {
+          const dr = data[i] - selectedColor.r;
+          const dg = data[i + 1] - selectedColor.g;
+          const db = data[i + 2] - selectedColor.b;
+          const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+
+          if (distance < threshold) {
+            if (activeTool === "remove") {
+              data[i + 3] = 0;
+            } else if (activeTool === "swap") {
+              data[i] = replacement.r;
+              data[i + 1] = replacement.g;
+              data[i + 2] = replacement.b;
+            }
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      function setActiveTool(tool) {
+        activeTool = tool;
+        removeBtn.classList.remove("bg-blue-500", "text-white");
+        swapBtn.classList.remove("bg-blue-500", "text-white");
+        replacementColorInput.classList.add("hidden");
+
+        if (tool === "remove") {
+          removeBtn.classList.add("bg-blue-500", "text-white");
+        } else if (tool === "swap") {
+          swapBtn.classList.add("bg-blue-500", "text-white");
+          replacementColorInput.classList.remove("hidden");
+        }
+        processImage();
+      }
+
+      // Event Listeners
+      uploadInput.addEventListener("change", (e) => {
+        if (e.target.files.length) loadImage(e.target.files[0]);
+      });
+
+      canvas.addEventListener("click", pickColor);
+
+      toleranceSlider.addEventListener("input", () => {
+        toleranceValue.textContent = toleranceSlider.value;
+        processImage();
+      });
+
+      replacementColorInput.addEventListener("input", processImage);
+
+      removeBtn.addEventListener("click", () => setActiveTool("remove"));
+      swapBtn.addEventListener("click", () => setActiveTool("swap"));
+
+      downloadBtn.addEventListener("click", () => {
+        if (!originalImageData) return;
+        const link = document.createElement("a");
+        link.download = "edited.png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      });
+    </script>
+  </body>
+</html>
