@@ -2,6 +2,8 @@
 
 A lightweight, browser-based PNG color editing tool built with **pure HTML, Tailwind CDN, and vanilla JavaScript** — no frameworks, no build tools, no backend.
 
+Why did i build this rediculosly simple project in 15min using AI? Coz i can. 😎
+
 It allows you to:
 
 - Upload a PNG image
@@ -15,7 +17,7 @@ It allows you to:
 
 ## 📸 Demo
 
-![Demo Screenshot](.docs/demo.png)
+![Demo Screenshot](.docs/demo.gif)
 
 ---
 
